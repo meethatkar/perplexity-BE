@@ -1,4 +1,8 @@
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+} from "@langchain/core/messages";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { MistralAI } from "@langchain/mistralai";
 
@@ -17,10 +21,18 @@ const mistralModel = new MistralAI({
   maxRetries: 2,
 });
 
-export const askAi = async (prompt) => {
-  console.log("RANNED");
+export const askAi = async (messages) => {
   try {
-    const response = await mistralModel.invoke([["human", prompt]]);
+    console.log("CHECK :", messages);
+
+    const response = await mistralModel.invoke(
+      messages.map((msg) => {
+        console.log("MSG GSM: ", msg);
+        return msg.role == "user"
+          ? new HumanMessage(msg.content)
+          : new AIMessage(msg.content);
+      }),
+    );
     return response;
   } catch (error) {
     console.error("AI Error:", error);

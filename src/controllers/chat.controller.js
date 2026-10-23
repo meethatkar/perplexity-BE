@@ -4,24 +4,37 @@ import messageModel from "../models/message.model.js";
 
 export const processAIRequest = async (req, res, next) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, chatID } = req.body;
     if (!prompt || prompt.trim() === "" || typeof prompt !== "string") {
       return res
         .status(400)
         .json({ success: false, message: "Invalid prompt" });
     }
+    let chatData;
+    if (!chatID) {
+      const title = await generateTitle(prompt);
+      chatData = await chatModel.create({
+        user: req.user.id,
+        title: title,
+      });
+    }
 
-    const title = await generateTitle(prompt);
-    const chatData = await chatModel.create({
-      user: req.user.id,
-      title: title,
+    const userResponseData = await messageModel.create({
+      chat: chatID || chatData._id,
+      content: prompt,
+      role: "user",
     });
-    console.log("CHAT DATA: ", chatData);
 
-    const response = await askAi(prompt);
+    const messages = await messageModel
+      .find({ chat: chatID || chatData._id })
+      .sort({ createdAt: 1 });
+
+    console.log("MSG MSG: ", messages);
+
+    const response = await askAi(messages);
 
     const aiResponseData = await messageModel.create({
-      chat: chatData._id,
+      chat: chatID || chatData._id,
       content: response,
       role: "ai",
     });
