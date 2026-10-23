@@ -55,3 +55,52 @@ export const processAIRequest = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getChats = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const chats = await chatModel
+      .find({ user: userId })
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "chats fetched successfully",
+      chats,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getMessages = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { chatId } = req.params;
+
+    const chat = await chatModel.findOne({
+      _id: chatId,
+      user: userId,
+    });
+    console.log("SINGLE CHAT: ", chat);
+
+    if (!chat) {
+      return res.status(404).json({
+        message: "chat not found",
+        success: false,
+      });
+    }
+
+    const messages = await messageModel.find({ chat: chatId });
+
+    return res.status(200).json({
+      message: "messages fetched for chat",
+      response: messages,
+      sucess: true,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// TODO Delete Chat.
