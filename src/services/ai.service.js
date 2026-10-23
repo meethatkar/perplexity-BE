@@ -1,6 +1,8 @@
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { MistralAI } from "@langchain/mistralai";
 
-export const model = new ChatGoogleGenerativeAI({
+const geminiModel = new ChatGoogleGenerativeAI({
   model: "gemini-3.7-flash",
   apiKey: process.env.GOOGLE_API_KEY,
   temperature: 0,
@@ -8,17 +10,36 @@ export const model = new ChatGoogleGenerativeAI({
   thinking_level: "MINIMAL",
 });
 
+const mistralModel = new MistralAI({
+  model: "ministral-3b-2512",
+  apiKey: process.env.MISTRAL_API_KEY,
+  temperature: 0,
+  maxRetries: 2,
+});
+
 export const askAi = async (prompt) => {
   console.log("RANNED");
-
   try {
-    console.log("TRIED");
-    const response = await model.invoke([["human", prompt]]);
-    console.log("DONE");
-    console.log("AI Response:", response.content);
+    const response = await mistralModel.invoke([["human", prompt]]);
     return response;
   } catch (error) {
     console.error("AI Error:", error);
+    return null;
+  }
+};
+
+export const generateTitle = async (prompt) => {
+  try {
+    const instruction = await mistralModel.invoke([
+      new SystemMessage(
+        "generate a title based on the prompt, keep title short and concise but covering main concept of the prompt such that by reading the title user will understand what the chat is all about.",
+      ),
+      new HumanMessage("generate a title for this message: " + prompt),
+    ]);
+
+    return instruction;
+  } catch (error) {
+    console.error("Generate Title Error:", error);
     return null;
   }
 };
