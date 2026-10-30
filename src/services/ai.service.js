@@ -44,7 +44,7 @@ export const generateTitle = async (prompt) => {
   try {
     const instruction = await mistralModel.invoke([
       new SystemMessage(
-        "generate a title based on the prompt, keep title short and concise but covering main concept of the prompt such that by reading the title user will understand what the chat is all about.",
+        "generate a title based on the prompt, keep title short and concise upto 7 words but covering main concept of the prompt such that by reading the title user will understand what the chat is all about.",
       ),
       new HumanMessage("generate a title for this message: " + prompt),
     ]);
