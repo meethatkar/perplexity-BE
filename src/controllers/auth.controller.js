@@ -121,7 +121,7 @@ export const logout = (req, res) => {
 
 export const getMe = async (req, res, next) => {
   try {
-    const userId = req.decoded.id;
+    const userId = req.user.id;
     const user = await userModel.findById(userId);
 
     if (!user) {

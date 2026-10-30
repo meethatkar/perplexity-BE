@@ -103,4 +103,31 @@ export const getMessages = async (req, res, next) => {
   }
 };
 
-// TODO Delete Chat.
+export const deleteChat = async (req, res, next) => {
+  const { chatID } = req.body;
+  const userId = req.user.id;
+  try {
+    const deleteChat = await chatModel.findOneAndDelete({
+      _id: chatID,
+      user: userId,
+    });
+
+    if (!deleteChat) {
+      return res.status(404).json({
+        message: "chat not found",
+        success: false,
+      });
+    }
+
+    const deleteMessages = await messageModel.deleteMany({
+      chat: chatID,
+    });
+
+    return res.status(201).json({
+      message: "chat deleted successfully",
+      success: true,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
