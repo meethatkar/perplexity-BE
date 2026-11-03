@@ -1,4 +1,8 @@
-import { askAi, generateTitle } from "../services/ai.service.js";
+import {
+  askAi,
+  generateFollowUpQuestions,
+  generateTitle,
+} from "../services/ai.service.js";
 import chatModel from "../models/chat.model.js";
 import messageModel from "../models/message.model.js";
 
@@ -45,11 +49,14 @@ export const processAIRequest = async (req, res, next) => {
       role: "ai",
     });
 
+    const suggestions = await generateFollowUpQuestions(prompt, response);
+
     return res.status(200).json({
       success: true,
       message: "Prompt processed successfully",
       response: aiResponseData,
       chatDetails: chatData,
+      suggestions: suggestions,
     });
   } catch (error) {
     next(error);

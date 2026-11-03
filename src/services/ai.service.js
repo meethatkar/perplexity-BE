@@ -79,6 +79,36 @@ export const askAi = async (messages) => {
   }
 };
 
+const followUpSchema = z.object({
+  questions: z
+    .array(z.string())
+    .min(3)
+    .max(4)
+    .describe("An array of 3 to 4 short, highly relevant follow-questions."),
+});
+
+const questionsGenerator = mistralModel.withStructuredOutput(followUpSchema, {
+  name: "generate_follow_ups",
+});
+
+export const generateFollowUpQuestions = async (prompt, aiAnswer) => {
+  try {
+    const questions = await questionsGenerator.invoke([
+      new SystemMessage(
+        "You are an assistant that suggests concise follow-up questions. Based on the user's query and the assistant's answer, provide 3 to 4 logical questions the user might ask next.",
+      ),
+      new HumanMessage(
+        `User Prompt: ${prompt}\nAI Answer: ${aiAnswer}\nToday's Date: ${currentDate}\nGenerate follow-up questions.`,
+      ),
+    ]);
+
+    return questions.questions || [];
+  } catch (error) {
+    console.log("ERROR occured in generating follow up questions: ", error);
+    return [];
+  }
+};
+
 export const generateTitle = async (prompt) => {
   try {
     const instruction = await mistralModel.invoke([
