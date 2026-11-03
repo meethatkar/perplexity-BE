@@ -33,17 +33,17 @@ export const processAIRequest = async (req, res, next) => {
 
     const response = await askAi(messages);
 
-    const aiResponseData = await messageModel.create({
-      chat: chatID || chatData._id,
-      content: response,
-      role: "ai",
-    });
-
     if (!response) {
       return res
         .status(500)
         .json({ success: false, message: "AI service error" });
     }
+
+    const aiResponseData = await messageModel.create({
+      chat: chatID || chatData._id,
+      content: response,
+      role: "ai",
+    });
 
     return res.status(200).json({
       success: true,
