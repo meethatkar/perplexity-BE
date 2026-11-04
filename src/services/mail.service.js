@@ -18,7 +18,7 @@ transporter
     console.log("Email transporter is ready");
   })
   .catch((_) => {
-    console.log("Error in email transporter");
+    console.log("Error in email transporter", _);
   });
 
 export async function sendEmail({ to, subject, html, text }) {

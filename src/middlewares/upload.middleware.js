@@ -1,0 +1,10 @@
+import multer from "multer";
+
+const storage = multer.memoryStorage();
+
+export const uploadAudio = multer({
+  storage,
+  limits: {
+    fileSize: 25 * 1024 * 1024, //25 MB max limit
+  },
+});
