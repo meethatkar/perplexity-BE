@@ -1,26 +1,22 @@
 import { transcribeAudioWithGroq } from "../services/transcription.service.js";
+import { sendSuccess } from "../utils/response.js";
+import { ValidationError } from "../utils/AppError.js";
 
-export const handleTranscribe = async (req, res) => {
+export const handleTranscribe = async (req, res, next) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "No Audio file provided" });
+      return next(
+        new ValidationError({ audio: "Audio recording file is required" }, "No audio file received"),
+      );
     }
 
     const text = await transcribeAudioWithGroq(
       req.file.buffer,
-      req.file.originalName || "audio.webm",
+      req.file.originalname || "audio.webm",
     );
 
-    return res.status(200).json({
-      success: true,
-      text,
-    });
+    return sendSuccess(res, 200, "Audio transcribed successfully", { text });
   } catch (error) {
-    console.error("Error in Transcribe Controller: ", error);
-
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+    next(error);
   }
 };

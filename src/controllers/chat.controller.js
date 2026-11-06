@@ -5,27 +5,34 @@ import {
 } from "../services/ai.service.js";
 import chatModel from "../models/chat.model.js";
 import messageModel from "../models/message.model.js";
+import { sendSuccess } from "../utils/response.js";
+import { ValidationError, NotFoundError, AppError } from "../utils/AppError.js";
 
 export const processAIRequest = async (req, res, next) => {
   try {
     const { prompt, chatID } = req.body;
-    if (!prompt || prompt.trim() === "" || typeof prompt !== "string") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid prompt" });
+    if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
+      return next(
+        new ValidationError(
+          { prompt: "Prompt text is required" },
+          "Invalid prompt",
+        ),
+      );
     }
+
     let chatData;
     if (!chatID) {
       const title = await generateTitle(prompt);
       chatData = await chatModel.create({
         user: req.user.id,
+        git,
         title: title,
       });
     }
 
-    const userResponseData = await messageModel.create({
+    await messageModel.create({
       chat: chatID || chatData._id,
-      content: prompt,
+      content: prompt.trim(),
       role: "user",
     });
 
@@ -33,14 +40,12 @@ export const processAIRequest = async (req, res, next) => {
       .find({ chat: chatID || chatData._id })
       .sort({ createdAt: 1 });
 
-    console.log("MSG MSG: ", messages);
-
     const response = await askAi(messages);
 
     if (!response) {
-      return res
-        .status(500)
-        .json({ success: false, message: "AI service error" });
+      return next(
+        new AppError("Failed to generate AI response", 502, "AI_SERVICE_ERROR"),
+      );
     }
 
     const aiResponseData = await messageModel.create({
@@ -51,12 +56,10 @@ export const processAIRequest = async (req, res, next) => {
 
     const suggestions = await generateFollowUpQuestions(prompt, response);
 
-    return res.status(200).json({
-      success: true,
-      message: "Prompt processed successfully",
+    return sendSuccess(res, 200, "Prompt processed successfully", {
       response: aiResponseData,
       chatDetails: chatData,
-      suggestions: suggestions,
+      suggestions: suggestions || [],
     });
   } catch (error) {
     next(error);
@@ -70,11 +73,7 @@ export const getChats = async (req, res, next) => {
       .find({ user: userId })
       .sort({ createdAt: -1 });
 
-    return res.status(200).json({
-      success: true,
-      message: "chats fetched successfully",
-      chats,
-    });
+    return sendSuccess(res, 200, "Chats fetched successfully", { chats });
   } catch (error) {
     next(error);
   }
@@ -89,22 +88,16 @@ export const getMessages = async (req, res, next) => {
       _id: chatId,
       user: userId,
     });
-    console.log("SINGLE CHAT: ", chat);
 
     if (!chat) {
-      return res.status(404).json({
-        message: "chat not found",
-        success: false,
-      });
+      return next(new NotFoundError("Conversation thread not found"));
     }
 
-    const messages = await messageModel.find({ chat: chatId });
+    const messages = await messageModel
+      .find({ chat: chatId })
+      .sort({ createdAt: 1 });
 
-    return res.status(200).json({
-      message: "messages fetched for chat",
-      response: messages,
-      sucess: true,
-    });
+    return sendSuccess(res, 200, "Messages fetched for chat", { messages });
   } catch (error) {
     next(error);
   }
@@ -113,27 +106,26 @@ export const getMessages = async (req, res, next) => {
 export const deleteChat = async (req, res, next) => {
   const { chatID } = req.body;
   const userId = req.user.id;
+
   try {
+    if (!chatID) {
+      return next(new ValidationError({ chatID: "chatID is required" }));
+    }
+
     const deleteChat = await chatModel.findOneAndDelete({
       _id: chatID,
       user: userId,
     });
 
     if (!deleteChat) {
-      return res.status(404).json({
-        message: "chat not found",
-        success: false,
-      });
+      return next(new NotFoundError("Chat conversation not found"));
     }
 
-    const deleteMessages = await messageModel.deleteMany({
+    await messageModel.deleteMany({
       chat: chatID,
     });
 
-    return res.status(201).json({
-      message: "chat deleted successfully",
-      success: true,
-    });
+    return sendSuccess(res, 200, "Chat deleted successfully", { chatID });
   } catch (error) {
     next(error);
   }

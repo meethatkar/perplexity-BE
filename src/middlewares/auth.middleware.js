@@ -1,10 +1,11 @@
 import jwt from "jsonwebtoken";
+import { UnauthorizedError } from "../utils/AppError.js";
 
 export const verifyUser = (req, res, next) => {
   const token = req.cookies.token;
 
   if (!token) {
-    return res.status(401).json({ message: "Authentication token missing" });
+    return next(new UnauthorizedError("Authentication token missing"));
   }
 
   try {
@@ -12,6 +13,6 @@ export const verifyUser = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
-    return res.status(401).json({ message: "Invalid or expired token" });
+    return next(new UnauthorizedError("Invalid or expired session token"));
   }
 };
