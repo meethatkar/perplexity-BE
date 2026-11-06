@@ -1,13 +1,24 @@
 import userModel from "../models/user.model.js";
 import { sendEmail } from "../services/mail.service.js";
 import jwt from "jsonwebtoken";
+import { sendSuccess } from "../utils/response.js";
+import {
+  ConflictError,
+  UnauthorizedError,
+  NotFoundError,
+  ValidationError,
+} from "../utils/AppError.js";
 
 export const register = async (req, res, next) => {
   try {
     const { username, email, password, verified } = req.body;
     const userExists = await userModel.findOne({ email });
     if (userExists) {
-      return res.status(400).json({ message: "User already exists" });
+      return next(
+        new ConflictError("User with this email already exists", {
+          email: "Email is already registered",
+        }),
+      );
     }
 
     const user = await userModel.create({
@@ -20,6 +31,7 @@ export const register = async (req, res, next) => {
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET,
+      { expiresIn: "1d" },
     );
 
     await sendEmail({
@@ -28,14 +40,12 @@ export const register = async (req, res, next) => {
       html: `
         <p> Welcome Onboard ${username} </p>
         <h1>Verify your email</h1>
-        <p>Click the link to verify your email: <a href="http://localhost:3000/api/auth/verify-email?token=${token}">Verify Email</a></p>
-        <span style="color: #888; font-size: 12px; margin-top: 20px; display: block;"> Team Perplexity AI</span>
+        <p>Click the link to verify your email: <a href="${process.env.BACKEND_URL}/api/auth/verify-email?token=${token}">Verify Email</a></p>
+        <span style="color: #888; font-size: 12px; margin-top: 20px; display: block;"> Team aether-ai </span>
       `,
     });
 
-    res.status(201).json({
-      message: "User registered successfully",
-    });
+    return sendSuccess(res, 201, "User registered successfully. Please verify your email.");
   } catch (error) {
     next(error);
   }
@@ -44,7 +54,7 @@ export const register = async (req, res, next) => {
 export const login = async (req, res, next) => {
   try {
     const { userInfo, password } = req.body;
-    // Find user by either email or username using $or
+    // Find user by either email or username
     const user = await userModel
       .findOne({
         $or: [{ email: userInfo }, { username: userInfo }],
@@ -52,27 +62,28 @@ export const login = async (req, res, next) => {
       .select("+password");
 
     if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return next(new UnauthorizedError("Invalid credentials"));
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return next(new UnauthorizedError("Invalid credentials"));
     }
 
     if (!user.verified) {
-      return res.status(400).json({
-        message: "Please verify your email address",
-        success: false,
-        error: "Email Not Verified",
-      });
+      return next(
+        new ValidationError(
+          null,
+          "Please verify your email address before logging in",
+        ),
+      );
     }
 
     const token = jwt.sign(
       { id: user._id, email: user.email },
       process.env.JWT_SECRET,
       {
-        expiresIn: "1h",
+        expiresIn: "7d",
       },
     );
 
@@ -80,11 +91,10 @@ export const login = async (req, res, next) => {
       httpOnly: true,
       secure: true,
       sameSite: "none",
-      maxAge: 3600000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.status(200).json({
-      message: "Login successful",
+    return sendSuccess(res, 200, "Login successful", {
       user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (error) {
@@ -96,18 +106,18 @@ export const verifyEmail = async (req, res, next) => {
   try {
     const { token } = req.query;
 
-    const userId = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await userModel.findById(userId.id);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await userModel.findById(decoded.id);
 
     if (!user) {
-      return res.status(404).json({ message: "Token not found" });
+      return next(new NotFoundError("User not found or token invalid"));
     }
 
     user.verified = true;
     await user.save();
 
     const html = `<h1> User Verified </h1>
-    <p> Click Here to Login <a href="http://localhost:3000/api/auth/login">Login</a></p>`;
+    <p> Click Here to Login <a href="${process.env.FRONTEND_URL}/login">Login to aether-ai</a></p>`;
     res.send(html);
   } catch (error) {
     next(error);
@@ -116,7 +126,7 @@ export const verifyEmail = async (req, res, next) => {
 
 export const logout = (req, res) => {
   res.clearCookie("token");
-  res.status(200).json({ message: "Logout successful" });
+  return sendSuccess(res, 200, "Logout successful");
 };
 
 export const getMe = async (req, res, next) => {
@@ -125,11 +135,10 @@ export const getMe = async (req, res, next) => {
     const user = await userModel.findById(userId);
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return next(new NotFoundError("User profile not found"));
     }
 
-    res.status(200).json({
-      message: "User fetched successfully",
+    return sendSuccess(res, 200, "User profile fetched", {
       user: {
         id: user._id,
         username: user.username,
