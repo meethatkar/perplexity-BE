@@ -5,6 +5,7 @@ import {
   logout,
   verifyEmail,
   getMe,
+  guestLogin,
 } from "../controllers/auth.controller.js";
 import { verifyUser } from "../middlewares/auth.middleware.js";
 import {
@@ -49,5 +50,12 @@ router.get("/verify-email", verifyEmail);
  * @access Private
  */
 router.get("/get-me", verifyUser, getMe);
+
+/**
+ * @route POST /api/auth/guest
+ * @description Creates Guest user session
+ * @access Public
+ */
+router.post("/guest", guestLogin);
 
 export default router;

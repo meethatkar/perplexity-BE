@@ -25,7 +25,6 @@ export const processAIRequest = async (req, res, next) => {
       const title = await generateTitle(prompt);
       chatData = await chatModel.create({
         user: req.user.id,
-        git,
         title: title,
       });
     }
