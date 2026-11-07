@@ -45,7 +45,11 @@ export const register = async (req, res, next) => {
       `,
     });
 
-    return sendSuccess(res, 201, "User registered successfully. Please verify your email.");
+    return sendSuccess(
+      res,
+      201,
+      "User registered successfully. Please verify your email.",
+    );
   } catch (error) {
     next(error);
   }
@@ -145,6 +149,52 @@ export const getMe = async (req, res, next) => {
         email: user.email,
         verified: user.verified,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const guestLogin = async (req, res, next) => {
+  const { username } = req.body;
+  const [email, password] = [
+    Math.random().toString(36).slice(2) + "@guest.com",
+    Math.random().toString(36).slice(2),
+  ];
+  const userExists = await userModel.findOne({ username });
+  if (userExists) {
+    return next(
+      new ConflictError("User with this username already exists", {
+        username: "Username is already taken",
+      }),
+    );
+  }
+
+  try {
+    const user = await userModel.create({
+      username,
+      email,
+      password,
+      verified: true,
+    });
+
+    const token = jwt.sign(
+      { id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1d",
+      },
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    return sendSuccess(res, 201, "Guest user session created successfully.", {
+      user: { id: user._id, username: user.username, email: user.email },
     });
   } catch (error) {
     next(error);

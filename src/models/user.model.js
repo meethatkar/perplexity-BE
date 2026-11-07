@@ -26,6 +26,10 @@ const userSchema = new mongoose.Schema(
       required: true,
       default: false,
     },
+    isGuest: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );
