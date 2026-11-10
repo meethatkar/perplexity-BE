@@ -44,3 +44,11 @@ export class ConflictError extends AppError {
   }
 }
 
+export class RateLimitError extends AppError {
+  constructor(
+    message = "AI service rate limit exceeded. Please wait a moment before trying again.",
+  ) {
+    super(message, 429, "RATE_LIMIT_EXCEEDED", null);
+  }
+}
+
