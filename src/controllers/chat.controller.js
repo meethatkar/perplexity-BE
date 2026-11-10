@@ -6,9 +6,17 @@ import {
 import chatModel from "../models/chat.model.js";
 import messageModel from "../models/message.model.js";
 import { sendSuccess } from "../utils/response.js";
-import { ValidationError, NotFoundError, AppError } from "../utils/AppError.js";
+import {
+  ValidationError,
+  NotFoundError,
+  AppError,
+  RateLimitError,
+} from "../utils/AppError.js";
 
 export const processAIRequest = async (req, res, next) => {
+  let createdMessageId = null;
+  let createdChatId = null;
+
   try {
     const { prompt, chatID } = req.body;
     if (!prompt || typeof prompt !== "string" || !prompt.trim()) {
@@ -27,28 +35,48 @@ export const processAIRequest = async (req, res, next) => {
         user: req.user.id,
         title: title,
       });
+      createdChatId = chatData._id;
     }
 
-    await messageModel.create({
-      chat: chatID || chatData._id,
+    const activeChatId = chatID || chatData._id;
+
+    const userMessage = await messageModel.create({
+      chat: activeChatId,
       content: prompt.trim(),
       role: "user",
     });
+    createdMessageId = userMessage._id;
 
     const messages = await messageModel
-      .find({ chat: chatID || chatData._id })
+      .find({ chat: activeChatId })
       .sort({ createdAt: 1 });
 
-    const response = await askAi(messages);
+    let response;
+    try {
+      response = await askAi(messages);
+    } catch (aiErr) {
+      // Check if the AI provider returned a 429 rate limit error
+      const isRateLimited =
+        aiErr?.statusCode === 429 ||
+        aiErr?.status === 429 ||
+        aiErr?.message?.includes("429") ||
+        aiErr?.message?.includes("Rate limit") ||
+        aiErr?.body?.includes?.("rate_limited");
+
+      if (isRateLimited) {
+        throw new RateLimitError(
+          "AI provider rate limit reached. Please wait a moment and try again.",
+        );
+      }
+      throw aiErr;
+    }
 
     if (!response) {
-      return next(
-        new AppError("Failed to generate AI response", 502, "AI_SERVICE_ERROR"),
-      );
+      throw new AppError("Failed to generate AI response", 502, "AI_SERVICE_ERROR");
     }
 
     const aiResponseData = await messageModel.create({
-      chat: chatID || chatData._id,
+      chat: activeChatId,
       content: response,
       role: "ai",
     });
@@ -61,6 +89,18 @@ export const processAIRequest = async (req, res, next) => {
       suggestions: suggestions || [],
     });
   } catch (error) {
+    // If an error occurred (such as rate limiting), remove the user message and newly created empty chat from Database
+    try {
+      if (createdMessageId) {
+        await messageModel.findByIdAndDelete(createdMessageId);
+      }
+      if (createdChatId) {
+        await chatModel.findByIdAndDelete(createdChatId);
+      }
+    } catch (cleanupErr) {
+      console.error("Error cleaning up message/chat after failure:", cleanupErr);
+    }
+
     next(error);
   }
 };
