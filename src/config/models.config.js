@@ -1,5 +1,5 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatMistralAI } from "@langchain/mistralai";
+// import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatCohere } from "@langchain/cohere";
 
@@ -14,14 +14,16 @@ export const geminiModel = new ChatGoogleGenerativeAI({
 });
 
 /**
- * Mistral Chat Model
+ * Mistral Chat Model - COMMENTED OUT (API key expired)
  */
+/*
 export const mistralModel = new ChatMistralAI({
   model: "ministral-3b-2512",
   apiKey: process.env.MISTRAL_API_KEY,
   temperature: 0,
   maxRetries: 2,
 });
+*/
 
 /**
  * Cohere Chat Model (Perplexity / RAG style)
