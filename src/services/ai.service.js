@@ -6,7 +6,7 @@ import {
 import { tool } from "@langchain/core/tools";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import {
-  mistralModel,
+  // mistralModel, // Commented out - API key expired
   groqModel,
   cohereModel,
 } from "../config/models.config.js";
@@ -24,9 +24,9 @@ export const InternetSearchTool = tool(searchInternet, {
   }),
 });
 
-// Agent creation using Gemini for web search reasoning (higher rate limit, reliable tool calling)
+// Agent creation using Groq for fast inference, web search reasoning, and answer generation
 const agent = createAgent({
-  model: mistralModel,
+  model: groqModel,
   tools: [InternetSearchTool],
   systemPrompt: `You are a helpful and accurate research assistant.
 Today's date is ${currentDate}.
@@ -101,18 +101,19 @@ const followUpSchema = z.object({
 const followUpParser = StructuredOutputParser.fromZodSchema(followUpSchema);
 
 export const generateFollowUpQuestions = async (prompt, aiAnswer) => {
+  const formatInstructions = followUpParser.getFormatInstructions();
+  const messages = [
+    new SystemMessage(
+      `You are an assistant that suggests concise follow-up questions. Based on the user's query and the assistant's answer, provide 3 to 4 logical questions the user might ask next.\n\n${formatInstructions}`,
+    ),
+    new HumanMessage(
+      `User Prompt: ${prompt}\nAI Answer: ${aiAnswer}\nToday's Date: ${currentDate}\nGenerate follow-up questions.`,
+    ),
+  ];
+
+  // Primary: Cohere
   try {
-    const formatInstructions = followUpParser.getFormatInstructions();
-
-    const response = await cohereModel.invoke([
-      new SystemMessage(
-        `You are an assistant that suggests concise follow-up questions. Based on the user's query and the assistant's answer, provide 3 to 4 logical questions the user might ask next.\n\n${formatInstructions}`,
-      ),
-      new HumanMessage(
-        `User Prompt: ${prompt}\nAI Answer: ${aiAnswer}\nToday's Date: ${currentDate}\nGenerate follow-up questions.`,
-      ),
-    ]);
-
+    const response = await cohereModel.invoke(messages);
     const rawContent =
       typeof response.content === "string"
         ? response.content
@@ -124,30 +125,68 @@ export const generateFollowUpQuestions = async (prompt, aiAnswer) => {
 
     const parsedData = await followUpParser.parse(rawContent);
     return parsedData.questions || [];
-  } catch (error) {
-    console.error(
-      "ERROR occurred in generating follow up questions with Cohere: ",
-      error,
+  } catch (cohereError) {
+    console.warn(
+      "Cohere follow-up generation failed, attempting fallback with Groq:",
+      cohereError.message || cohereError,
     );
-    return [];
+    // Fallback: Groq
+    try {
+      const response = await groqModel.invoke(messages);
+      const rawContent =
+        typeof response.content === "string"
+          ? response.content
+          : Array.isArray(response.content)
+            ? response.content
+                .map((c) => (typeof c === "string" ? c : c.text || ""))
+                .join("")
+            : String(response.content || "");
+
+      const parsedData = await followUpParser.parse(rawContent);
+      return parsedData.questions || [];
+    } catch (groqError) {
+      console.error(
+        "ERROR occurred in generating follow up questions (both Cohere and Groq fallback failed):",
+        groqError,
+      );
+      return [];
+    }
   }
 };
 
-// Title generator powered by Groq
+// Title generator powered by Cohere (with Groq fallback) to distribute rate limits
 export const generateTitle = async (prompt) => {
-  try {
-    const instruction = await groqModel.invoke([
-      new SystemMessage(
-        "Generate a short, concise title (max 6 words) based on the prompt. Do not use quotes, asterisks, markdown, or any prefix like 'Title:'. Return only the plain text title.",
-      ),
-      new HumanMessage("Generate a title for this message: " + prompt),
-    ]);
+  const messages = [
+    new SystemMessage(
+      "Generate a short, concise title (max 6 words) based on the prompt. Do not use quotes, asterisks, markdown, or any prefix like 'Title:'. Return only the plain text title.",
+    ),
+    new HumanMessage("Generate a title for this message: " + prompt),
+  ];
 
-    return typeof instruction.content === "string"
-      ? instruction.content.trim()
-      : String(instruction.content || "New Chat");
-  } catch (error) {
-    console.error("Generate Title Error with Groq:", error);
-    return "New Chat";
+  // Primary: Cohere to reduce load on Groq
+  try {
+    const instruction = await cohereModel.invoke(messages);
+    const title =
+      typeof instruction.content === "string"
+        ? instruction.content.trim()
+        : String(instruction.content || "New Chat");
+    return title.replace(/^["']|["']$/g, "").trim() || "New Chat";
+  } catch (cohereError) {
+    console.warn(
+      "Cohere title generation failed, falling back to Groq:",
+      cohereError.message || cohereError,
+    );
+    // Fallback: Groq
+    try {
+      const instruction = await groqModel.invoke(messages);
+      const title =
+        typeof instruction.content === "string"
+          ? instruction.content.trim()
+          : String(instruction.content || "New Chat");
+      return title.replace(/^["']|["']$/g, "").trim() || "New Chat";
+    } catch (groqError) {
+      console.error("Generate Title Error with Groq fallback:", groqError);
+      return "New Chat";
+    }
   }
 };
